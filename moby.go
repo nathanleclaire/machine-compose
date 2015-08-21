@@ -4,11 +4,15 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/docker/machine/libmachine"
 	"github.com/docker/machine/libmachine/drivers/virtualbox"
+	"github.com/docker/machine/libmachine/host"
 	"github.com/docker/machine/libmachine/log"
+	"gopkg.in/yaml.v2"
 )
 
 type FancyWriter struct {
@@ -82,6 +86,27 @@ func main() {
 	}
 
 	if os.Args[1] == "up" {
+		data, err := ioutil.ReadFile("moby.yml")
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		unmarshalHost := host.Host{}
+
+		if err := yaml.Unmarshal(data, &unmarshalHost); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		spew.Dump(unmarshalHost)
+
+		h.HostOptions = unmarshalHost.HostOptions
+
+		spew.Dump(h)
+
+		os.Exit(0)
+
 		if err := libmachine.Create(store, h); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
