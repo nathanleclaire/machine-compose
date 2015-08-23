@@ -10,7 +10,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/docker/machine/libmachine"
 	"github.com/docker/machine/libmachine/drivers/virtualbox"
-	"github.com/docker/machine/libmachine/host"
 	"github.com/docker/machine/libmachine/log"
 	"gopkg.in/yaml.v2"
 )
@@ -51,12 +50,20 @@ func (f FancyWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
+type DriverWrapper struct {
+	DriverOptions *virtualbox.Driver
+}
+
 func bail() {
-	fmt.Println("Improper usage.  Usage: moby up")
+	fmt.Println("Improper usage.  Usage: moby [up|apply]")
 	os.Exit(1)
 }
 
 func main() {
+	if len(os.Args) != 2 {
+		bail()
+	}
+
 	libmachine.SetDebug(true)
 
 	fwout, err := NewFancyWriter(os.Stdout)
@@ -74,44 +81,62 @@ func main() {
 	store := libmachine.GetDefaultStore()
 	store.Path = "/tmp/moby"
 
-	driver := virtualbox.NewDriver("mobydick", "/tmp/moby")
+	hostName := "mobydick"
 
-	h, err := store.NewHost(driver)
+	data, err := ioutil.ReadFile("moby.yml")
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
-	if len(os.Args) != 2 {
-		bail()
-	}
+	switch os.Args[1] {
+	case "up":
+		driver := virtualbox.NewDriver(hostName, "/tmp/moby")
 
-	if os.Args[1] == "up" {
-		data, err := ioutil.ReadFile("moby.yml")
+		h, err := store.NewHost(driver)
 		if err != nil {
+			log.Fatal(err)
+		}
+
+		driverWrapper := DriverWrapper{driver}
+
+		if err := yaml.Unmarshal(data, h); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
 
-		unmarshalHost := host.Host{}
-
-		if err := yaml.Unmarshal(data, &unmarshalHost); err != nil {
+		if err := yaml.Unmarshal(data, &driverWrapper); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
 
-		spew.Dump(unmarshalHost)
-
-		h.HostOptions = unmarshalHost.HostOptions
-
+		h.Driver = driverWrapper.DriverOptions
 		spew.Dump(h)
-
-		os.Exit(0)
 
 		if err := libmachine.Create(store, h); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-	} else {
+	case "apply":
+		h, err := store.Get(hostName)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		spew.Dump(h)
+
+		if err := yaml.Unmarshal(data, h); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		if err := h.Provision(); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	default:
 		bail()
 	}
+
 }
