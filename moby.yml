@@ -1,0 +1,13 @@
+hostoptions:
+  engineoptions:
+    storagedriver: aufs
+    labels:
+      - foo=bar
+      - baz=quux
+      - far=go
+    arbitraryflags:
+      - dns=8.8.8.8
+driveroptions:
+  accesstoken: <token>
+  region: sfo1
+  size: 2gb
