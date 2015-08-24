@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
@@ -14,49 +15,28 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type FancyWriter struct {
-	bufWriter *bufio.Writer
+type FancyTracker struct {
+	r io.Reader
+	w io.Writer
 }
 
-func NewFancyWriter(w io.Writer) (*FancyWriter, error) {
-	f := &FancyWriter{bufio.NewWriter(w)}
-
-	_, err := f.bufWriter.WriteString("=> ")
-	if err != nil {
-		return nil, err
+func (s *FancyTracker) Track() {
+	scanner := bufio.NewScanner(s.r)
+	for scanner.Scan() {
+		fmt.Fprintln(s.w, "=>", scanner.Text())
 	}
 
-	return f, nil
-}
-
-func (f FancyWriter) Write(p []byte) (int, error) {
-	n := 0
-	for _, b := range p {
-		if err := f.bufWriter.WriteByte(b); err != nil {
-			return n, err
-		}
-		if b == '\n' {
-			if err := f.bufWriter.Flush(); err != nil {
-				return n, err
-			}
-			n, err := f.bufWriter.WriteString("=> ")
-			if err != nil {
-				return n, err
-			}
-		}
-		n++
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "Error tracking writer:", err)
 	}
-
-	return n, nil
 }
 
 type DriverWrapper struct {
-	DriverOptions *virtualbox.Driver
+	DriverOptions *digitalocean.Driver
 }
 
 func bail() {
-	fmt.Println("Improper usage.  Usage: moby [up|apply]")
-	os.Exit(1)
+	log.Fatal("Improper usage.  Usage: moby [up|apply]")
 }
 
 func main() {
@@ -66,74 +46,81 @@ func main() {
 
 	libmachine.SetDebug(true)
 
-	fwout, err := NewFancyWriter(os.Stdout)
-	if err != nil {
-		bail()
+	errR, errW := io.Pipe()
+	errTracker := &FancyTracker{
+		r: errR,
+		w: os.Stderr,
 	}
-	log.SetOutWriter(fwout)
 
-	fwerr, err := NewFancyWriter(os.Stderr)
-	if err != nil {
-		bail()
+	outR, outW := io.Pipe()
+	outTracker := &FancyTracker{
+		r: outR,
+		w: os.Stdout,
 	}
-	log.SetErrWriter(fwerr)
+
+	go errTracker.Track()
+	go outTracker.Track()
+
+	dmlog.SetOutWriter(errW)
+	dmlog.SetErrWriter(outW)
 
 	store := libmachine.GetDefaultStore()
-	store.Path = "/tmp/moby"
+	store.Path = "./store"
 
 	hostName := "mobydick"
 
 	data, err := ioutil.ReadFile("moby.yml")
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	switch os.Args[1] {
 	case "up":
-		driver := virtualbox.NewDriver(hostName, "/tmp/moby")
+		driver, err := drivermaker.NewDriver("digitalocean", hostName, "./store")
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		h, err := store.NewHost(driver)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		driverWrapper := DriverWrapper{driver}
-
 		if err := yaml.Unmarshal(data, h); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 
+		castedDriver, ok := driver.(*digitalocean.Driver)
+		if !ok {
+			log.Fatal("Fatal error, shoud be able to cast to driver type \"digitalocean\".")
+		}
+
+		driverWrapper := DriverWrapper{castedDriver}
+
 		if err := yaml.Unmarshal(data, &driverWrapper); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 
 		h.Driver = driverWrapper.DriverOptions
 		spew.Dump(h)
 
 		if err := libmachine.Create(store, h); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 	case "apply":
 		h, err := store.Get(hostName)
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 
 		spew.Dump(h)
 
 		if err := yaml.Unmarshal(data, h); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 
 		if err := h.Provision(); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 	default:
 		bail()
