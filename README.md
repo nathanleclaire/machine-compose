@@ -94,6 +94,8 @@ driveroptions:
 Then run, `./moby apply`.  It will go out and change the Docker daemon settings
 for you!
 
+Oh yeah, I forgot to mention, but `swarmoptions` is a supported key too :D
+
 ## caveat emptor
 
 This is very much just a toy and not meant for any real kinds of usage, only
