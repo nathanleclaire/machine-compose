@@ -8,11 +8,12 @@ import (
 	"log"
 	"os"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/docker/machine/libmachine"
-	"github.com/docker/machine/libmachine/drivers/virtualbox"
-	"github.com/docker/machine/libmachine/log"
-	"gopkg.in/yaml.v2"
+	"github.com/nathanleclaire/moby/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
+	"github.com/nathanleclaire/moby/Godeps/_workspace/src/github.com/docker/machine/libmachine"
+	"github.com/nathanleclaire/moby/Godeps/_workspace/src/github.com/docker/machine/libmachine/drivers/digitalocean"
+	"github.com/nathanleclaire/moby/Godeps/_workspace/src/github.com/docker/machine/libmachine/drivers/drivermaker"
+	dmlog "github.com/nathanleclaire/moby/Godeps/_workspace/src/github.com/docker/machine/libmachine/log"
+	"github.com/nathanleclaire/moby/Godeps/_workspace/src/gopkg.in/yaml.v2"
 )
 
 type FancyTracker struct {
